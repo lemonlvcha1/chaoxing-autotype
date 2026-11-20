@@ -1,0 +1,27 @@
+# =============================================================================
+# requirements.txt
+#
+# This project has NO third-party dependencies: every feature uses only the
+# Python standard library. Running
+#
+#     pip install -r requirements.txt
+#
+# therefore installs nothing. That is expected, not an error.
+#
+# Note: comments in this file are intentionally in English/ASCII only.
+# pip decodes requirement files with the system locale codec (GBK on Chinese
+# Windows), so non-ASCII comments would raise UnicodeDecodeError.
+#
+# Runtime requirements
+#   - OS: Windows 10 / 11 (x64). ctypes.wintypes and winsound are Windows-only,
+#     and the tool calls user32.dll (SendInput, clipboard APIs).
+#   - Python: 3.8 or newer (3.10+ recommended; verified on 3.12).
+#     Check "Add python.exe to PATH" during installation.
+#   - tkinter: shipped with the python.org installer; needed only by the
+#     self-test and the optional GUI mode.
+#
+# Standard-library modules used:
+#   __future__, argparse, ctypes, html, os, re, sys, time, tkinter, traceback, winsound
+#
+# Optional, build-time only (NOT a runtime dependency) - packaging to a single exe:
+# pyinstaller>=6.0
