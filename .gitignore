@@ -1,13 +1,20 @@
-# 本机运行产物
-__pycache__/
-tmp/
-*.log
+# Runtime-generated files
+输入日志.txt
+自检结果.txt
+剪贴板整理日志.txt
 
-# 快捷方式内写死了本机绝对路径，不可移植（见 README 第 4 节）
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# Local, machine-specific Windows shortcuts (they embed absolute paths)
 *.lnk
 
-# 空的遗留文件
-run_essay.bat
+# Packaging output
+build/
+dist/
+*.spec
 
-# 与本工具无关的本机资料
-DSH-不同模式对比.md
+# Local scratch space (research notes, pip temp directories)
+/tmp/

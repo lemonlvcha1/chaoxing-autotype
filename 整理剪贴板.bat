@@ -4,11 +4,18 @@ set "PYTHONIOENCODING=utf-8"
 setlocal
 cd /d "%~dp0"
 
-rem Clean the clipboard in place and show what changed.
-rem Extra arguments are passed through, e.g.  clean-clipboard.bat --clean-aggressive
+rem Clipboard cleaner.
+rem   double-click      -> clean once and show the before/after preview
+rem   ... --watch       -> keep running: every copy is cleaned automatically
+rem Extra arguments are forwarded to the one-shot mode, e.g. --clean-aggressive
 
-py -3 "type_text.py" --clean-clipboard --beep %*
-if errorlevel 9009 python "type_text.py" --clean-clipboard --beep %*
+if /i "%~1"=="--watch" (
+    py -3 "type_text.py" --watch-clipboard
+    if errorlevel 9009 python "type_text.py" --watch-clipboard
+) else (
+    py -3 "type_text.py" --clean-clipboard --beep %*
+    if errorlevel 9009 python "type_text.py" --clean-clipboard --beep %*
+)
 
 echo.
 pause

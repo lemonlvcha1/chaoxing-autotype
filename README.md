@@ -1,268 +1,165 @@
-# 剪贴板清洗 + 模拟键盘输入工具
+# Clipboard Cleaner · Keystroke Typer
 
-> 解决两个连在一起的麻烦：**从网页复制来的内容是一团 LaTeX/HTML 标记**，而**目标输入框又不让粘贴、只能手打**。
-> 本工具先把剪贴板洗成干净纯文本，再用模拟键盘逐字输入到当前焦点窗口。
+![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-0078D6?logo=windows&logoColor=white)
+![Python](https://img.shields.io/badge/python-3.8%2B-3776AB?logo=python&logoColor=white)
+![Dependencies](https://img.shields.io/badge/dependencies-none-brightgreen)
+![License](https://img.shields.io/badge/license-MIT-green)
 
-Windows 专用 · 零第三方依赖 · 纯 Python 标准库实现
+Clean clipboard text, then type it into fields that reject paste.
+清洗剪贴板里的 LaTeX / HTML / Markdown，再用模拟键盘把纯文本输入到禁止粘贴的输入框。
 
----
+A zero-dependency Windows utility: it reads the clipboard, normalises rich-text
+artefacts into readable plain text, and injects the result as real keystrokes into
+whatever input control has focus.
 
-## 1. 它解决什么问题
+## Features
 
-| 痛点 | 本工具的做法 |
+- **Rich-text normalisation** — LaTeX math, HTML tags/entities, Markdown markers, zero-width/BOM/bidi characters and UTF-8/GBK mojibake all become plain text.
+- **Keystroke injection** — Windows `SendInput` with `KEYEVENTF_UNICODE`; works with Chinese, symbols and emoji, without an IME or keyboard-layout dependency.
+- **Three modes** — type on demand, clean the clipboard, or watch it continuously.
+- **Safety guards** — types only when the expected window is in the foreground; detects UIPI permission mismatches instead of failing silently.
+- **Observable** — beeps, an append-only log, and a built-in self-test / diagnostics report.
+- **No third-party packages** — standard library only.
+
+## Requirements
+
+| Item | Requirement |
 |---|---|
-| 输入框禁用粘贴（如学习通答题框） | 用 Windows `SendInput` 模拟键盘逐字输入，绕开剪贴板粘贴 |
-| 复制来的内容是 `\(x_1=2,\ \times\)` 这类 LaTeX 源码 | 自动还原成 `x₁=2, ×` 等可读文本 |
-| 复制来的内容带 `<p>`、`&lt;`、`**粗体**`、表格竖线 | 自动转纯文本 |
-| 复制来的内容带零宽字符、BOM、双向控制符 | 自动清除 |
-| 网页编码错乱出现 `æµ‹è¯•` 这类乱码 | 自动尝试 UTF-8 / GBK 还原 |
-| 长文本手打太慢 | 逐字注入，默认 0.003 秒/字，可调 |
+| OS | **Windows 10 / 11 (x64)** — Win32 APIs are used; macOS/Linux unsupported |
+| Python | **3.8+** (verified on 3.12); tick *Add python.exe to PATH* |
+| Third-party packages | **None** — see [requirements.txt](requirements.txt) |
+| tkinter | Bundled with the python.org installer; used by `--self-test` and `--gui` |
+| Administrator | Only when the **target application** runs elevated (see Troubleshooting) |
 
-## 2. 功能一览
+## Files
 
-- **富文本清洗**：LaTeX 公式、HTML 标签与实体、Markdown 标记、不可见字符、编码乱码
-- **模拟键盘输入**：支持中文、英文、emoji、符号；不依赖输入法、不受键盘布局影响
-- **三种使用节奏**：双击即用（等窗口自动开始）、一键清洗剪贴板、常驻热键/监听
-- **安全保护**：只在前台是目标窗口时才动手；权限不匹配时主动拒绝而不是乱输入
-- **全程可诊断**：提示音反馈 + 日志文件 + `--diagnose` 权限/窗口诊断
-
-## 3. 环境要求
-
-| 项目 | 要求 |
+| File | Purpose |
 |---|---|
-| 操作系统 | **Windows 10 / 11（x64）**。脚本调用 `user32.dll` 的 `SendInput` 与剪贴板 API，`ctypes.wintypes`、`winsound` 为 Windows 专属，无法在 macOS/Linux 运行 |
-| Python | **3.8 或更高**（推荐 3.10+，已验证 3.12）。安装时勾选 *Add python.exe to PATH* |
-| 第三方包 | **无**。见 [requirements.txt](requirements.txt)（文件里只有注释、没有包名，`pip install -r` 不会安装任何东西） |
-| tkinter | 仅「自检」和 `--gui` 需要；python.org 官方安装包默认自带 |
-| 管理员权限 | 平时不需要；**仅当目标程序以管理员身份运行时**需要（见第 10 节 UIPI） |
-| 网络 | 不需要 |
+| [type_text.py](type_text.py) | Entire implementation (cleaning, injection, self-test, diagnostics) |
+| [即用即打.bat](即用即打.bat) | **Main entry** — clean and type into the focused field (no console window) |
+| [即用即打-可见.bat](即用即打-可见.bat) | Same, but keeps a console window for troubleshooting |
+| [整理剪贴板.bat](整理剪贴板.bat) | Clean the clipboard in place; start with `--watch` to clean every copy |
+| [自检.bat](自检.bat) | Opens a window, types a sample into it and reports pass/fail |
+| [诊断.bat](诊断.bat) | Prints integrity levels, window list and clipboard length |
 
-> 关于 `requirements.txt`：注释特意写成**纯英文**。pip 会用系统区域编码（中文 Windows 上是 GBK）解码该文件，若里面含 UTF-8 中文注释会直接报 `UnicodeDecodeError`；保持 ASCII 可避免此问题。
+Script variants and one-click shortcuts are intentionally not shipped: a
+Windows shortcut can be created locally, and `.pyw` files depend on a file
+association that may be broken.
 
-## 4. 文件说明
+## Quick start
 
-### 核心
+```bash
+git clone <repository-url>
+cd <repository-directory>
+py -3 -c "import type_text; print('ok')"
+```
 
-| 文件 | 说明 | 必需 |
+1. **Copy** the text (`Ctrl+C`).
+2. **Double-click** `即用即打.bat`.
+3. **Click into the target field**; after the beep sequence the text is typed and the process exits.
+
+Cleaning is automatic. By default the tool waits up to 120 s for a window whose
+title contains `Chrome` (change the keyword in the `.bat` for other browsers).
+
+## Usage
+
+| Mode | How | What happens |
 |---|---|---|
-| [type_text.py](type_text.py) | 全部功能实现（输入、清洗、诊断、热键） | ✅ 必需 |
+| Type | `即用即打.bat` | Waits for Chrome, settles 2 s, types the cleaned clipboard |
+| Clean | `整理剪贴板.bat` | Clipboard is rewritten in place; before/after preview printed |
+| Watch | `整理剪贴板.bat --watch` | Every new clipboard content is cleaned automatically (Ctrl+C to stop) |
+| Self-test | `自检.bat` | Verifies the whole injection chain in a throw-away window |
+| Diagnose | `诊断.bat` | Integrity levels, visible windows, clipboard length |
 
-### 双击即用的快捷方式（推荐）
+<details>
+<summary><b>Full command-line reference</b></summary>
 
-> ⚠️ 这三个 `.lnk` 里写死了本机绝对路径，**换电脑要重新创建**。
-
-| 文件 | 用途 |
-|---|---|
-| [1-输入到学习通.lnk](1-输入到学习通.lnk) | 清洗剪贴板 → 等 Chrome 到前台 → 自动输入（无窗口） |
-| [2-只清洗剪贴板.lnk](2-只清洗剪贴板.lnk) | 只把剪贴板洗成纯文本，之后自己 `Ctrl+V` |
-| [3-自检.lnk](3-自检.lnk) | 自检模拟输入是否可用 |
-
-### 批处理启动器（不依赖文件关联，可移植）
-
-| 文件 | 用途 |
-|---|---|
-| [即用即打-静默.bat](即用即打-静默.bat) | 无窗口输入（等同 `1-输入到学习通.lnk`，推荐给别人用） |
-| [即用即打-可见.bat](即用即打-可见.bat) | 有窗口，能看见卡在哪一步 |
-| [整理剪贴板.bat](整理剪贴板.bat) | 就地清洗剪贴板并显示前后预览 |
-| [自动整理剪贴板.bat](自动整理剪贴板.bat) | 常驻监听：每次复制后自动清洗（窗口需保持打开） |
-| [自检.bat](自检.bat) | 自检 |
-| [诊断.bat](诊断.bat) | 打印权限级别、窗口列表、剪贴板长度 |
-| [运行-模拟输入.bat](运行-模拟输入.bat) | 旧版流程：读文件/剪贴板，按 `F8` 开始（不清洗） |
-| [剪贴板即打.bat](剪贴板即打.bat) | 旧版流程：倒计时 4 秒后输入 |
-
-### 可选脚本
-
-| 文件 | 说明 |
-|---|---|
-| [即用即打.pyw](即用即打.pyw) / [即用即打-不限窗口.pyw](即用即打-不限窗口.pyw) | 无窗口版；**依赖 `.pyw` 文件关联**，关联损坏时会用记事本打开而不执行 |
-| [整理剪贴板.pyw](整理剪贴板.pyw) / [自检.pyw](自检.pyw) | 同上，建议优先用对应 `.bat` |
-
-## 5. 快速开始（三步）
-
-1. **复制** 要输入的内容（`Ctrl+C`）
-2. **双击** `即用即打-静默.bat`（或 `1-输入到学习通.lnk`）
-3. **切到目标窗口**，点一下输入框让光标在里面闪；听到「低音→中音→高音」后文字自动出现，程序自动退出
-
-> 清洗（LaTeX/HTML/Markdown）**自动完成**，无需额外操作。等待时间不设限（默认最多 2 分钟等目标窗口）。
-
-## 6. 三种使用方式
-
-### 方式 A：直接输入到输入框（主用途）
-
-双击 `即用即打-静默.bat` → 目标窗口标题需包含 `Chrome`（脚本内写死，可改）。
-
-### 方式 B：只清洗剪贴板
-
-双击 `整理剪贴板.bat`（或 `2-只清洗剪贴板.lnk`）→ 剪贴板变干净 → 到任何地方 `Ctrl+V`。
-
-### 方式 C：全自动监听
-
-双击 `自动整理剪贴板.bat` 并保持窗口打开 → 之后每次复制都会自动洗净写回。关闭窗口即停止。
-
-> 方式 C 会常驻后台；不需要时直接关窗口。
-
-## 7. 命令行参数
-
-所有参数都传给 `type_text.py`，例如：
+All launchers forward to `type_text.py`:
 
 ```
 py -3 type_text.py --clipboard --clean --wait-window Chrome --settle 2 --beep
 ```
 
-### 输入源
+**Input source**: `PATH` · `--file FILE` · `--text "TEXT"` · `--clipboard` · `--gui` · `--clean-clipboard` · `--watch-clipboard`
 
-| 参数 | 说明 |
-|---|---|
-| `路径`（位置参数） | 文本文件路径，也支持把文件拖到 `.bat` 上 |
-| `--file 文件` | 同上（显式写法） |
-| `--text "内容"` | 直接指定文本 |
-| `--clipboard` | 使用剪贴板内容 |
-| `--gui` | 打开编辑窗口手动粘贴/编辑 |
-| `--clean-clipboard` | 就地清洗剪贴板后写回，不输入 |
-| `--watch-clipboard` | 常驻监听剪贴板并自动清洗 |
+**Timing and safety**
 
-### 时序与安全
-
-| 参数 | 默认 | 说明 |
+| Argument | Default | Description |
 |---|---|---|
-| `--wait-window 关键字` | 关 | 等到前台窗口标题包含该关键字再输入（推荐，无时间压力） |
-| `--wait-timeout 秒` | 60 | 等待上限 |
-| `--settle 秒` | 1 | 等到窗口后额外静置，留给人点进输入框 |
-| `--only-window 关键字` | 关 | 真正输入前再核对一次前台窗口，不符则拒绝 |
-| `--countdown 秒` | 0 | 倒计时后开始（按 `F8` 可提前，`Esc` 取消） |
-| `--delay 秒` | 0.003 | 每字符间隔；丢字时调大（如 0.01） |
-| `--newline shift\|enter` | shift | 换行方式；`shift` 防聊天框误发送 |
-| `--submit` | 关 | 结束后再按一次回车（发送） |
-| `--force` | 关 | 忽略权限警告照常尝试 |
-| `--beep` / `--no-beep` | 关 / 关 | 无窗口时用提示音反馈 / 关闭提示音 |
-| `--no-gui` | 关 | 没有文本时不要弹窗，直接报错退出 |
-| `--hotkey` | 关 | 常驻热键模式：`Ctrl+Alt+V` 输入、`Ctrl+Alt+B` 输入并发送、`Ctrl+Alt+Q` 退出 |
+| `--wait-window KEYWORD` | off | Wait until the foreground title contains `KEYWORD` |
+| `--wait-timeout` / `--settle` | 60 / 1 | Wait bound / extra delay after matching |
+| `--only-window KEYWORD` | off | Re-check before typing (exit code 2 when mismatched) |
+| `--countdown SECONDS` | 0 | Auto-start after a countdown (`F8` starts early, `Esc` cancels) |
+| `--delay` | 0.003 | Per-character delay; raise if characters are dropped |
+| `--newline shift\|enter` | shift | Newline strategy (`shift` avoids accidental sending) |
+| `--submit` · `--force` | off | Press `Enter` at the end · ignore permission warning |
+| `--beep` / `--no-beep` · `--no-gui` | off | Audible feedback · fail instead of opening a window |
+| `--hotkey` | off | Daemon: `Ctrl+Alt+V` type, `Ctrl+Alt+B` type+send, `Ctrl+Alt+Q` quit |
 
-### 清洗
+**Cleaning**: `--clean` (full) · `--strip-md` (Markdown only) · `--no-latex` · `--no-html` · `--no-repair` · `--plain-sub` (`x1` instead of `x₁`) · `--clean-raw` · `--clean-aggressive`
 
-| 参数 | 说明 |
-|---|---|
-| `--clean` | 完整清洗：LaTeX + HTML + Markdown + 不可见字符 + 编码乱码 |
-| `--strip-md` | 只抹 Markdown 标记（旧行为） |
-| `--no-latex` / `--no-html` / `--no-repair` | 分别跳过 LaTeX 还原 / HTML 读取 / 乱码修复 |
-| `--plain-sub` | 数学下标用普通字符 `x1`，而不是 Unicode `x₁` |
-| `--clean-raw` | 仅清洗剪贴板时退回"只抹 Markdown" |
-| `--clean-aggressive` | 连残留的 `_ * # ~` 也删掉（可能误伤代码） |
+**Diagnostics**: `--dry-run` · `--diagnose` · `--self-test` · `--log FILE`
 
-### 诊断
+**Exit codes**: `0` ok · `1` aborted/write failed · `2` window mismatch · `3` wait timeout · `4` no text · `5` permission mismatch
 
-| 参数 | 说明 |
-|---|---|
-| `--dry-run` | 只统计字符数/预览，不输入 |
-| `--diagnose` | 打印本程序与各窗口的完整性级别、剪贴板长度 |
-| `--log 文件` | 把过程追加写入日志 |
+</details>
 
-### 退出码
+<details>
+<summary><b>Cleaning rules</b></summary>
 
-| 码 | 含义 |
-|---|---|
-| 0 | 成功 |
-| 1 | 被中止 / 写回剪贴板失败 |
-| 2 | 前台窗口不符合 `--only-window`，主动拒绝（未输入任何字符） |
-| 3 | 等待目标窗口超时（未输入） |
-| 4 | 没有可用文本（剪贴板为空/读取失败） |
-| 5 | **权限不匹配**（目标程序权限高于本程序），请以管理员运行 |
-
-## 8. 清洗规则
-
-| 原始内容 | 清洗后 |
+| Input | Output |
 |---|---|
 | `\(x_1=2,\ w_1=0.5\)` | `x₁=2, w₁=0.5` |
-| `z\ge0`、`a\times b`、`\frac{a}{b}` | `z≥0`、`a×b`、`a/b` |
-| `\sqrt{x}`、`\alpha`、`x^{2}` | `√x`、`α`、`x²` |
-| `**加粗**`、`*斜体*`、`~~删除~~` | `加粗`、`斜体`、`删除` |
-| `# 标题`、`> 引用` | `标题`、`引用` |
-| `- 列表项` | `· 列表项` |
-| `\| A \| B \|` + `\|---\|` | `A B`（表格扁平化） |
-| `[文字](https://...)` | `文字` |
-| `` `code` `` / ```` ``` ```` 围栏 | `code` / 只留内容 |
-| `<p>`、`&lt;`、`&nbsp;` | 换行、`<`、空格 |
-| 零宽字符、BOM、软连字符、bidi 控制符 | 删除 |
-| `æµ‹è¯•`（UTF-8 被当 Latin-1） | `测试` |
-| 连续空格/空行 | 压缩 |
+| `z\ge0` · `a\times b` · `\frac{a}{b}` · `\sqrt{x}` | `z≥0` · `a×b` · `a/b` · `√x` |
+| `\alpha` · `x^{2}` | `α` · `x²` |
+| `**bold**` · `*italic*` · `~~strike~~` | `bold` · `italic` · `strike` |
+| `# Heading` · `> quote` · `- item` | `Heading` · `quote` · `· item` |
+| `\| A \| B \|` + `\|---\|` | `A B` (flattened) |
+| `[text](url)` · `` `code` `` | `text` · `code` |
+| `<p>` · `&lt;` · `&nbsp;` | newline · `<` · space |
+| zero-width chars · BOM · bidi controls | removed |
+| `æµ‹è¯•` (UTF-8 read as Latin-1) | `测试` |
 
-**不误伤**：`snake_case`、`a*b`、`C#`、`第#1项`、`café résumé` 保持原样（有 34 项自动化测试覆盖）。
+Preserved verbatim: `snake_case`, `a*b`, `C#`, `第#1项`, `café résumé`
+(verified against 34 assertions during development).
 
-## 9. 工作原理
+</details>
 
-1. **读**：从剪贴板同时取 `CF_UNICODETEXT`（纯文本）与 `HTML Format`（富文本），各跑一遍清洗管线
-2. **洗**：乱码修复 → LaTeX 还原 → HTML 转文本 → Markdown 去除 → 不可见字符清理 → 空白压缩
-3. **选**：两份结果按可读性打分取优（日志记录"采用纯文本/HTML"）
-4. **等**：轮询前台窗口标题，等到匹配的关键字（默认 `Chrome`）
-5. **打**：`SendInput` + `KEYEVENTF_UNICODE` 直接投递 UTF-16 码元（中文/emoji 均可用，等价于输入法投递字符）
-6. **退**：完成或中止后进程自行退出，不留后台
+## Troubleshooting
 
-## 10. 常见问题
-
-### 双击文件却是记事本打开
-
-`.pyw`/`.py` 的文件关联可能损坏（本机实测 `Python.NoConFile\shell` 的默认动词为空，Windows 遂用编辑器打开）。**解决：改用 `.bat` 或 `.lnk`**，它们不依赖该关联。
-
-### 听到三声低音，什么都没输入
-
-权限不匹配（UIPI）：Windows 不允许低完整性进程向高完整性窗口注入按键，且 `SendInput` **不报错**（静默丢弃）。解决：右键启动器 →「以管理员身份运行」，或让 Chrome 以普通权限启动。用 `诊断.bat` 可看到两者的完整性级别。
-
-### 有提示音但页面没字
-
-光标不在输入框里。先点一下目标输入框（作业页可能要先点"作答/编辑"进入可编辑状态）。
-
-### 个别字符丢了
-
-少数控件（例如 Tk 窗口）会吞掉 `U+0080–U+00FF` 区字符（`·`、`×`、`é`）。经对照测试，**原生 Win32 编辑框与 Chromium 系控件不受影响**。若目标确实丢字，可调大 `--delay`，或把 `--clean` 换成 `--strip-md` 并手动替换该符号。
-
-### 换行变成了直接发送
-
-目标框把回车当发送。保持默认 `--newline shift`（Shift+Enter），不要用 `--newline enter`。
-
-### 热键模式注册失败
-
-`Ctrl+Alt+V` 被其他软件占用。改用参数自行组合，或改用非热键的启动器。
-
-### 杀毒软件报警
-
-模拟按键类程序常被启发式误报。源码在 [type_text.py](type_text.py) 完全公开，可放行或加入白名单。
-
-### 目标不是 Chrome
-
-`即用即打-静默.bat` 里写的是 `Chrome`。用 Edge/学习通客户端时，把 `--wait-window` 与 `--only-window` 的关键字改成对应窗口标题里的词，或改用 [即用即打-不限窗口.pyw](即用即打-不限窗口.pyw)。
-
-## 11. 拷到别人电脑
-
-**需要复制**：`type_text.py` + `即用即打-静默.bat` + `整理剪贴板.bat` + `自检.bat`（`.bat` 内使用相对路径，放任意目录均可）。
-
-**不要复制**：`*.lnk`（含本机绝对路径）。
-
-**对方操作**：装 Python 3（勾选 Add to PATH）→ 复制上述文件到同一目录 → 双击 `自检.bat` 确认通过 → 双击 `即用即打-静默.bat` 使用。
-
-如需**对方完全不装 Python**，可在本机用 `pyinstaller --onefile --noconsole` 打包成 exe（属可选构建步骤，非运行依赖）。
-
-## 12. 已知限制
-
-- **仅 Windows**：依赖 Win32 API。
-- **LaTeX 命令表不穷尽**：未识别命令会"删命令、留内容"。
-- **表格被扁平化**：多列表格清洗后可读性一般。
-- **不可逆乱码**：已含 `U+FFFD` / `锟斤拷` 的文本无法还原，工具会保留原样。
-- **UIPI 限制**：无法向更高权限窗口注入，只能提权运行本工具。
-- **Tk 控件局限**：`自检.pyw` 基于 Tk，对 `U+0080–U+00FF` 字符偏保守（真实目标不受影响）。
-- **无独立评估**：本工具只负责"送字"，不校验目标页面是否成功接收（可看日志/页面）。
-
-## 13. 运行时生成的文件
-
-| 文件 | 说明 |
+| Symptom | Cause and remedy |
 |---|---|
-| `输入日志.txt` | 每次输入的过程记录（`--log` 写入），排查用 |
-| `自检结果.txt` | 自检结果追加记录 |
-| `剪贴板整理日志.txt` | 整理出错时的异常记录 |
+| Double-click opens an editor | A `.pyw`/`.py` association issue — use the `.bat` launchers |
+| Three low beeps, nothing typed | UIPI blocked injection (target runs elevated). Run the launcher as administrator, or start the target unelevated; `诊断.bat` shows both levels |
+| Beeps but no text | The caret is not inside an editable control — click into the field first |
+| Some symbols missing | Rare controls drop `U+0080–U+00FF`; Chromium and native Win32 controls are unaffected. Raise `--delay` if it persists |
+| Newline sends the message | The target treats `Enter` as submit — keep `--newline shift` |
+| Target is not Chrome | Change the `--wait-window` / `--only-window` keyword in `即用即打.bat` |
+| Antivirus alert | Keystroke injection is often flagged heuristically; the full source is in `type_text.py` |
 
-均可随时删除。
+## How it works
 
-## 14. 免责声明
+1. Read `CF_UNICODETEXT` and the `HTML Format` payload from the clipboard.
+2. Run both through the pipeline: mojibake repair → LaTeX → HTML → Markdown → invisible characters/whitespace.
+3. Pick the more readable result (the log records which source was used).
+4. Poll the foreground window title until it matches the expected keyword.
+5. Inject with `SendInput` + `KEYEVENTF_UNICODE`, then exit.
 
-- 本工具仅用于**提升正常文字输入效率**（如把整理好的答案输入学习通讨论区/答题框）。
-- 请勿用于考试代答、绕过平台规则等用途；学习通等平台可能启用切屏、粘贴、异常输入检测，由此产生的后果由使用者自行承担。
-- 工具不会联网、不会上传任何内容；所有处理均在本机完成。
+## Development
+
+```bash
+py -3 -m py_compile type_text.py    # syntax check
+py -3 type_text.py --self-test      # end-to-end self-test
+py -3 type_text.py --diagnose       # environment report
+```
+
+Packaging to a standalone executable (build machine only, not a runtime dependency):
+
+```bash
+py -3 -m pip install pyinstaller
+py -3 -m PyInstaller --onefile --noconsole --name clipclean type_text.py
+```
+
+## License
+
+Released under the [MIT License](LICENSE). Copyright (c) 2026 lemonlvcha1.

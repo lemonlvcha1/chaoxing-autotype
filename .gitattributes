@@ -1,0 +1,9 @@
+# Normalise line endings
+* text=auto
+
+# Windows batch files must keep CRLF (cmd.exe mishandles LF)
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Python sources use LF
+*.py text eol=lf

@@ -1,27 +1,27 @@
+# Runtime dependencies
 # =============================================================================
-# requirements.txt
-#
-# This project has NO third-party dependencies: every feature uses only the
-# Python standard library. Running
+# This project has NO third-party runtime dependencies. All functionality is
+# implemented with the Python standard library, therefore:
 #
 #     pip install -r requirements.txt
 #
-# therefore installs nothing. That is expected, not an error.
+# installs nothing. This is expected behaviour, not an error.
 #
-# Note: comments in this file are intentionally in English/ASCII only.
-# pip decodes requirement files with the system locale codec (GBK on Chinese
-# Windows), so non-ASCII comments would raise UnicodeDecodeError.
+# Standard library modules used
+#   __future__, argparse, ctypes, html, os, re, sys, time, tkinter, traceback,
+#   winsound
 #
-# Runtime requirements
-#   - OS: Windows 10 / 11 (x64). ctypes.wintypes and winsound are Windows-only,
-#     and the tool calls user32.dll (SendInput, clipboard APIs).
-#   - Python: 3.8 or newer (3.10+ recommended; verified on 3.12).
-#     Check "Add python.exe to PATH" during installation.
-#   - tkinter: shipped with the python.org installer; needed only by the
-#     self-test and the optional GUI mode.
+# Platform and interpreter constraints
+#   * OS       : Windows 10 / 11 (x64). The tool calls user32.dll (SendInput,
+#                clipboard APIs) and imports ctypes.wintypes / winsound, all of
+#                which are Windows-only.
+#   * Python   : >= 3.8 (developed and verified on CPython 3.12).
+#   * tkinter  : bundled with the python.org installer; required only by the
+#                self-test script and the optional --gui mode.
 #
-# Standard-library modules used:
-#   __future__, argparse, ctypes, html, os, re, sys, time, tkinter, traceback, winsound
-#
-# Optional, build-time only (NOT a runtime dependency) - packaging to a single exe:
+# Build-time only (packaging to a standalone executable, NOT needed to run):
 # pyinstaller>=6.0
+#
+# NOTE: keep this file ASCII-only. pip decodes requirement files with the system
+# locale codec (GBK on Chinese Windows); non-ASCII comments raise
+# UnicodeDecodeError before any requirement is parsed.
